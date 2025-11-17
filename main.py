@@ -1,6 +1,8 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
+from typing import Any, Dict
 
 app = FastAPI()
 
@@ -23,7 +25,7 @@ def hello():
 @app.get("/test")
 def test_database():
     """Test endpoint to check if database is available and accessible"""
-    response = {
+    response: Dict[str, Any] = {
         "backend": "✅ Running",
         "database": "❌ Not Available",
         "database_url": None,
@@ -63,6 +65,25 @@ def test_database():
     response["database_name"] = "✅ Set" if os.getenv("DATABASE_NAME") else "❌ Not Set"
     
     return response
+
+# Contact form submission endpoint
+@app.post("/api/contact")
+def submit_contact(payload: Dict[str, Any]):
+    try:
+        # Validate using schema
+        from schemas import Contactmessage
+        data = Contactmessage(**payload)
+
+        # Persist to database
+        from database import create_document
+        doc_id = create_document("contactmessage", data)
+
+        return {"status": "ok", "id": doc_id}
+    except ValidationError as ve:
+        raise HTTPException(status_code=422, detail=ve.errors())
+    except Exception as e:
+        # If DB not configured, still accept but mark unsaved
+        return {"status": "received", "note": str(e)}
 
 
 if __name__ == "__main__":
